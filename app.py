@@ -162,13 +162,15 @@ def main():
         st.markdown("Haz clic en cualquier columna para ordenar según la métrica deseada.")
         
         # Display styled dataframe
-        st.dataframe(
-            metrics_df.style.background_gradient(subset=["Ret_1y (%)", "Sharpe_Ratio", "Momentum_60d (%)"], cmap="RdYlGn")
-                            .background_gradient(subset=["Volatilidad_Anual (%)", "Max_Drawdown (%)"], cmap="Reds_r")
-                            .format(precision=2),
-            height=500,
-            use_container_width=True
-        )
+        try:
+            styled_df = (
+                metrics_df.style.background_gradient(subset=["Ret_1y (%)", "Sharpe_Ratio", "Momentum_60d (%)"], cmap="RdYlGn")
+                                .background_gradient(subset=["Volatilidad_Anual (%)", "Max_Drawdown (%)"], cmap="Reds_r")
+                                .format(precision=2)
+            )
+            st.dataframe(styled_df, height=500, use_container_width=True)
+        except Exception:
+            st.dataframe(metrics_df.round(2), height=500, use_container_width=True)
 
         # Export Buttons
         col_exp1, col_exp2 = st.columns(2)
