@@ -315,9 +315,10 @@ def get_top_buy_sell_rankings(all_data: pd.DataFrame) -> Tuple[List[Dict[str, An
     return to_sell, to_buy
 
 
-def get_recommendations_for_holding(currency: str, all_data: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Generates actionable advice if the user currently holds a specific currency."""
-    active_universe = [c for c in LIQUID_UNIVERSE if c == "USD" or c in all_data.columns]
+def get_recommendations_for_holding(currency: str, all_data: pd.DataFrame, max_destinations: int = 5) -> List[Dict[str, Any]]:
+    """Generates actionable advice if the user currently holds any specific currency from the dataset."""
+    # Available universe contains ALL currencies in dataset + USD
+    active_universe = ["USD"] + [c for c in all_data.columns if c != "USD"]
     results = []
 
     for dest in active_universe:
@@ -330,10 +331,10 @@ def get_recommendations_for_holding(currency: str, all_data: pd.DataFrame) -> Li
         return []
 
     sorted_res = sorted(results, key=lambda x: x["score_compuesto"], reverse=True)
-    top_3 = sorted_res[:3]
+    top_destinations = sorted_res[:max_destinations]
 
     recs = []
-    for rank_idx, opp in enumerate(top_3, 1):
+    for rank_idx, opp in enumerate(top_destinations, 1):
         dest = opp["destino"]
         score = opp["score_compuesto"]
         mom = opp["momentum_60d_pct"]
@@ -341,17 +342,25 @@ def get_recommendations_for_holding(currency: str, all_data: pd.DataFrame) -> Li
         spread = opp["spread_estimado_bps"]
 
         if rank_idx == 1:
-            protection = "Poder de compra y apreciación patrimonial en divisa con alto momentum."
-            capital_pct = "20% - 30% del capital disponible."
+            protection = "Máxima apreciación patrimonial y cobertura óptima contra la pérdida de poder adquisitivo."
+            capital_pct = "25% - 35% del capital disponible."
             invalidation = f"Si el par retrocede más de 2.5% de su nivel actual ({opp['ultimo_ratio']}) o el Sharpe cae por debajo de 1.0."
         elif rank_idx == 2:
-            protection = "Ahorro defensivo y diversificación ante riesgo inflacionario o cambiario local."
+            protection = "Ahorro defensivo, liquidez y diversificación ante riesgo inflacionario o cambiario local."
             capital_pct = "15% - 25% del capital disponible."
             invalidation = f"Si la volatilidad a 30 días supera 18% o la media móvil de 20 días cruza a la baja."
-        else:
+        elif rank_idx == 3:
             protection = "Preservación para viajes, compromisos internacionales o comercio exterior."
-            capital_pct = "10% - 15% del capital disponible."
+            capital_pct = "10% - 20% del capital disponible."
             invalidation = f"Si se rompe el soporte técnico de 60 días o surge un shock macroeconómico imprevisto."
+        elif rank_idx == 4:
+            protection = "Diversificación geográfica en divisa con baja correlación y estabilidad de precios."
+            capital_pct = "5% - 15% del capital disponible."
+            invalidation = f"Si el momentum a 60 días pasa a terreno negativo."
+        else:
+            protection = "Cobertura alternativa de mediano plazo con bajo costo de transacción."
+            capital_pct = "5% - 10% del capital disponible."
+            invalidation = f"Si la volatilidad diaria se dispara por encima del percentil 90."
 
         recs.append({
             "destino": dest,
