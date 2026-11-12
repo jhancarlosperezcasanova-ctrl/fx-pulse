@@ -222,14 +222,24 @@ def main():
 
         # Section 4: Advisor "Si yo tengo [DIVISA], ¿a dónde cambio?"
         st.markdown("### 4. Asesor Interactivo: «Si yo tengo [DIVISA], ¿a dónde cambio?»")
-        hold_curr = st.selectbox(
-            "Selecciona la divisa que actualmente posees:",
-            options=["USD", "EUR", "MXN", "COP", "ARS", "CLP", "PEN", "BRL", "GBP", "JPY"],
-            index=0
-        )
+        
+        # Populate selector with ALL available currencies in the dataset + USD
+        all_available_holdings = sorted(list(dict.fromkeys(["USD"] + list(all_data.columns))))
+        default_idx = all_available_holdings.index("USD") if "USD" in all_available_holdings else 0
+        
+        col_sel_hold, col_num_recs = st.columns([3, 1])
+        with col_sel_hold:
+            hold_curr = st.selectbox(
+                "Selecciona la divisa que actualmente posees (Catálogo Completo de más de 40 divisas):",
+                options=all_available_holdings,
+                index=default_idx
+            )
+        with col_num_recs:
+            max_recs = st.slider("Opciones a mostrar:", min_value=3, max_value=8, value=5)
 
-        recs = get_recommendations_for_holding(hold_curr, all_data)
+        recs = get_recommendations_for_holding(hold_curr, all_data, max_destinations=max_recs)
         if recs:
+            st.markdown(f"#### 🔍 Mejores destinos de cambio si tienes **{hold_curr}** (ordenados por convicción):")
             for idx, r in enumerate(recs, 1):
                 p = r["pair_info"]
                 with st.expander(f"Opción #{idx}: Rotar {hold_curr} ➔ {r['destino']} | Convicción: {r['score']} ({p['señal']})", expanded=(idx==1)):
@@ -238,12 +248,14 @@ def main():
                         st.markdown(f"**¿Qué estás protegiendo?:** {r['protection_goal']}")
                         st.markdown(f"**Umbral de tolerancia sugerido:** `{r['capital_pct']}`")
                         st.markdown(f"**Spread minorista estimado:** `{r['spread_bps']} bps`")
+                        st.markdown(f"**Tasa de cambio implícita actual:** `1 {hold_curr} = {p['ultimo_ratio']} {r['destino']}`")
                     with c_info2:
                         st.markdown(f"**Momentum 60d del par:** `+{r['momentum']}%`")
                         st.markdown(f"**Volatilidad 30d:** `{r['volatilidad']}%`")
+                        st.markdown(f"**Ratio de Sharpe del par:** `{p['sharpe_par']}`")
                         st.markdown(f"**Punto de invalidación:** 🛑 *{r['invalidation_point']}*")
         else:
-            st.warning(f"No hay suficientes datos cruzados para {hold_curr}.")
+            st.warning(f"No hay suficientes datos cruzados para calcular recomendaciones para {hold_curr}.")
 
         # Section 5: Riesgos y Advertencias
         st.markdown("### 5. Riesgos y Advertencias del Mercado Cambiario")
