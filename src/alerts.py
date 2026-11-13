@@ -14,23 +14,41 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_SENDER = "jhancarlosperezcasanova@gmail.com"
-DEFAULT_RECIPIENT = "jhancarlosperezcasanova@gmail.com"
+DEFAULT_SENDER = ""
+DEFAULT_RECIPIENT = ""
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 
 
-def send_high_conviction_alert(opportunity: Dict[str, Any], dashboard_url: str = "http://localhost:8501") -> Tuple[bool, str]:
+def send_high_conviction_alert(opportunity: Dict[str, Any], dashboard_url: str = "http://localhost:8501", override_password: str = None) -> Tuple[bool, str]:
     """
     Sends an automated HTML email alert for a high conviction directional FX opportunity.
-    Reads SMTP_APP_PASSWORD from .env.
+    Reads SMTP_APP_PASSWORD from .env, Streamlit secrets, or in-memory override.
     """
-    app_password = os.getenv("SMTP_APP_PASSWORD", "").strip()
+    app_password = (override_password or os.getenv("SMTP_APP_PASSWORD", "")).strip()
     sender_email = os.getenv("SMTP_SENDER_EMAIL", DEFAULT_SENDER).strip()
     recipient_email = os.getenv("SMTP_RECIPIENT_EMAIL", DEFAULT_RECIPIENT).strip()
 
+    # Check for Streamlit secrets if running inside Streamlit Cloud
     if not app_password:
-        return False, "SMTP_APP_PASSWORD no está configurada en el archivo .env. Alerta no enviada."
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets") and "SMTP_APP_PASSWORD" in st.secrets:
+                app_password = str(st.secrets["SMTP_APP_PASSWORD"]).strip()
+        except Exception:
+            pass
+
+    if not app_password:
+        return False, "⚠️ No se ha configurado la Contraseña de Aplicación de Gmail (16 letras). Ingrésala abajo o en tu archivo .env / Secrets."
+
+    # Validate ASCII characters: Gmail app passwords are strictly 16 ascii lowercase letters (e.g. 'abcd efgh ijkl mnop')
+    try:
+        app_password.encode('ascii')
+    except UnicodeEncodeError:
+        return False, "❌ La contraseña ingresada contiene caracteres con tildes o la letra 'ñ'. Debe ser una 'Contraseña de Aplicación' de Google (16 letras en minúscula, ej: 'abcd efgh ijkl mnop'), NO tu clave normal de Gmail ni la palabra 'contraseña'."
+
+    # Clean whitespace in password (often copied with spaces like 'xxxx xxxx xxxx xxxx')
+    clean_password = app_password.replace(" ", "")
 
     origen = opportunity.get("origen", "DIV_A")
     destino = opportunity.get("destino", "DIV_B")
@@ -125,8 +143,10 @@ def send_high_conviction_alert(opportunity: Dict[str, Any], dashboard_url: str =
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=12) as server:
             server.starttls()
-            server.login(sender_email, app_password)
+            server.login(sender_email, clean_password)
             server.sendmail(sender_email, [recipient_email], msg.as_string())
-        return True, f"Alerta enviada exitosamente a {recipient_email} vía Gmail SMTP."
+        return True, f"✅ ¡Alerta enviada exitosamente a {recipient_email} vía Gmail SMTP!"
+    except smtplib.SMTPAuthenticationError:
+        return False, "❌ Error de autenticación SMTP (Gmail): La contraseña de aplicación fue rechazada. Asegúrate de generar una contraseña de aplicación en https://myaccount.google.com/apppasswords con verificación en dos pasos activa."
     except Exception as e:
         return False, f"Fallo en envío SMTP: {str(e)}"
