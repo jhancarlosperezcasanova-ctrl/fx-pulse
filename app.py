@@ -3,7 +3,7 @@ FX-Pulse Dashboard
 Interactive Foreign Exchange Quantitative Radar built with Streamlit and Plotly.
 Includes the dedicated "Oportunidades de Cambio" (FX Opportunities Board) with
 cross-directional matrix, buy/sell rankings, holdings advisor, flow charts,
-PDF exports, and Gmail SMTP alerts.
+and PDF exports.
 """
 
 import os
@@ -33,7 +33,6 @@ from src.opportunities import (
     is_high_conviction
 )
 from src.flow_viz import plot_fx_flow_sankey, plot_currency_strength_gauge
-from src.alerts import send_high_conviction_alert
 from src.pdf_exporter import export_opportunities_to_pdf
 
 # Page configuration
@@ -307,29 +306,7 @@ def main():
                         mime="application/pdf"
                     )
 
-        # Section 7: Alertas Automáticas por Correo (Gmail SMTP)
-        st.markdown("### 7. ⚡ Alertas por Correo Electrónico (Gmail SMTP)")
-        st.markdown(
-            "Envío automático a `jhancarlosperezcasanova@gmail.com` mediante `smtplib`. "
-            "La alerta se dispara **SOLO** si se cumplen simultáneamente: Score ≥ 0.75, Momentum ≥ 2%, Sharpe ≥ 1.5, Vol 30d < 25%, Spread < 15 bps y Liquidez 'major' o 'cross'."
-        )
 
-        col_mail1, col_mail2 = st.columns([2, 1])
-        with col_mail1:
-            qualifying = [row.to_dict() for _, row in opportunities_df.iterrows() if is_high_conviction(row.to_dict())]
-            st.info(f"Oportunidades de muy alta convicción detectadas hoy: **{len(qualifying)}**")
-            if qualifying:
-                st.write(f"Candidato principal: `{qualifying[0]['origen']} ➔ {qualifying[0]['destino']}` (Score: {qualifying[0]['score_compuesto']})")
-
-        with col_mail2:
-            if st.button("📧 Probar / Disparar Alerta por Correo"):
-                target_alert = qualifying[0] if qualifying else opportunities_df.iloc[0].to_dict()
-                success, msg = send_high_conviction_alert(target_alert)
-                if success:
-                    st.success(msg)
-                else:
-                    st.warning(msg)
-                    st.caption("Configura tu contraseña de aplicación de Gmail en `.env` (variable `SMTP_APP_PASSWORD`).")
 
     # -------------------------------------------------------------------------
     # TAB: EVOLUCIÓN NORMALIZADA
