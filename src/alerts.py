@@ -7,6 +7,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.header import Header
 from datetime import datetime
 from typing import Dict, Any, Tuple
 from dotenv import load_dotenv
@@ -105,7 +106,7 @@ def send_high_conviction_alert(opportunity: Dict[str, Any], dashboard_url: str =
     """
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
+    msg["Subject"] = Header(subject, "utf-8")
     msg["From"] = sender_email
     msg["To"] = recipient_email
 
