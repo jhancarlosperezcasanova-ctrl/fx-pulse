@@ -34,7 +34,7 @@ SPREAD_ESTIMATES_BPS = {
 }
 
 MAJOR_CURRENCIES = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD"}
-CROSS_CURRENCIES = {"MXN", "BRL", "ZAR", "INR", "KRW", "PLN", "CZK", "HUF", "ILS", "SGD", "SEK", "NOK", "DKK"}
+CROSS_CURRENCIES = {"MXN", "BRL", "ZAR", "INR", "KRW", "PLN", "CZK", "HUF", "ILS", "SGD", "SEK", "NOK", "DKK", "COP", "CLP", "PEN"}
 
 
 def get_pair_spread_and_rank(curr_a: str, curr_b: str) -> Tuple[float, str]:
@@ -47,7 +47,7 @@ def get_pair_spread_and_rank(curr_a: str, curr_b: str) -> Tuple[float, str]:
         spread = 9.5
     elif curr_a in CROSS_CURRENCIES and curr_b in CROSS_CURRENCIES:
         rank = "cross"
-        spread = 14.0
+        spread = 16.0
     else:
         rank = "exotic"
         spread = 45.0
@@ -165,30 +165,34 @@ def compute_directional_pair_metrics(curr_a: str, curr_b: str, all_data: pd.Data
     chg_30d_pct = ((curr_ratio / ratio_30d) - 1.0) * 100.0
     mom_60d_pct = ((curr_ratio / ratio_60d) - 1.0) * 100.0
 
+    # Momentum over 60 trading days
+    mom_60d_pct = ((curr_ratio / ratio_60d) - 1.0) * 100.0
+    mom_20d_pct = ((curr_ratio / pair_series.iloc[-21]) - 1.0) * 100.0
+
     # Volatility of daily returns over last 30 trading days
     daily_returns_30d = pair_series.iloc[-30:].pct_change().dropna()
     vol_30d_annual = float(daily_returns_30d.std() * np.sqrt(252) * 100.0)
 
-    # Sharpe of the pair over the last 120 trading days (relative to 0 risk-free spread)
-    daily_returns_120d = pair_series.iloc[-120:].pct_change().dropna()
-    ret_mean = daily_returns_120d.mean() * 252
-    vol_120d = daily_returns_120d.std() * np.sqrt(252)
-    sharpe_par = round(float(ret_mean / vol_120d), 2) if vol_120d > 0.0001 else 0.0
+    # Sharpe ratio over 60 trading days (responsive to current regime)
+    daily_returns_60d = pair_series.iloc[-60:].pct_change().dropna()
+    ret_mean = daily_returns_60d.mean() * 252
+    vol_60d = daily_returns_60d.std() * np.sqrt(252)
+    sharpe_par = round(float(ret_mean / vol_60d), 2) if vol_60d > 0.0001 else 0.0
 
     spread_bps, liq_rank = get_pair_spread_and_rank(curr_a, curr_b)
 
     # =========================================================================
     # COMPOSITE CONVICTION SCORE (0.0 to 1.0):
-    # Ponderaciones:
-    #   * 40% Momentum a 60 días del par B vs A (direccionalidad sostenida)
-    #   * 25% Ratio de Sharpe del par (calidad del retorno ajustado por riesgo)
-    #   * 20% Penalización por volatilidad a 30 días (mayor certidumbre / menor vaivén)
-    #   * 15% Calidad de liquidez / spread (menor fricción de entrada y salida)
+    # Ponderaciones robustas y balanceadas:
+    #   * 40% Momentum a 60 días del par B vs A
+    #   * 25% Ratio de Sharpe reciente (60 días)
+    #   * 20% Control de volatilidad
+    #   * 15% Liquidez y menor fricción de spread
     # =========================================================================
-    mom_norm = np.clip((mom_60d_pct + 10.0) / 20.0, 0.0, 1.0) # -10% to +10% mapped to [0, 1]
-    sharpe_norm = np.clip((sharpe_par + 1.0) / 3.5, 0.0, 1.0) # -1 to +2.5 mapped to [0, 1]
-    vol_norm = np.clip(1.0 - (vol_30d_annual / 35.0), 0.0, 1.0) # 0 to 35% vol mapped to [1, 0]
-    liq_norm = 1.0 if liq_rank == "major" else (0.75 if liq_rank == "cross" else 0.30)
+    mom_norm = np.clip((mom_60d_pct + 8.0) / 16.0, 0.0, 1.0)
+    sharpe_norm = np.clip((sharpe_par + 0.5) / 2.5, 0.0, 1.0)
+    vol_norm = np.clip(1.0 - (vol_30d_annual / 45.0), 0.0, 1.0)
+    liq_norm = 1.0 if liq_rank == "major" else (0.75 if liq_rank == "cross" else 0.40)
 
     score_compuesto = (
         0.40 * mom_norm +
@@ -199,9 +203,9 @@ def compute_directional_pair_metrics(curr_a: str, curr_b: str, all_data: pd.Data
     score_compuesto = round(float(np.clip(score_compuesto, 0.01, 0.99)), 3)
 
     # Signal Traffic light
-    if score_compuesto >= 0.70 and mom_60d_pct > 1.5:
+    if score_compuesto >= 0.65 or (mom_60d_pct > 2.0 and sharpe_par > 0.5):
         signal = "🟢"
-    elif score_compuesto <= 0.45 or mom_60d_pct < -1.5:
+    elif score_compuesto <= 0.45 or mom_60d_pct < -2.0:
         signal = "🔴"
     else:
         signal = "🟡"
